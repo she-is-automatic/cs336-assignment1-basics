@@ -37,7 +37,7 @@ class BPETokenizer():
             merges = pickle.load(f)
 
         return cls(vocab, merges, special_tokens)
-    
+
     def encode(self, text: str) -> list[int] :
         """
         Encode an input text into a sequence of token IDs
@@ -47,17 +47,26 @@ class BPETokenizer():
 
         encoded_ids: list[int] = []
 
-        pre_tokens = self._pretokenize(text)
+        if self.special_tokens:
+            chunks = self._split_special_tokens(text)
+        else:
+            chunks = [text]
 
-        for pre_token in pre_tokens:
-            if isinstance(pre_token, bytes):
-                encoded_ids.append(self.token2id[pre_token])
+        for chunk in chunks:
+            if not chunk:
+                continue
+            elif self.special_tokens and chunk in self.special_tokens:
+                encoded_ids.append(self.token2id[chunk.encode('utf-8')])
             else:
-                pre_token = self._merge_pretoken(pre_token)
-                encoded_ids += [self.token2id[token] for token in pre_token]
+                words = re.findall(self.PAT, chunk)
+                
+                for word in words:
+                    pre_token = tuple([bytes([x]) for x in word.encode('utf-8')])
+                    pre_token = self._merge_pretoken(pre_token)
+                    encoded_ids += [self.token2id[token] for token in pre_token]
 
         return encoded_ids
-
+    
     
     def encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]:
         """
@@ -74,50 +83,23 @@ class BPETokenizer():
         return text_bytes.decode('utf-8', errors='replace')
     
     def _split_special_tokens(self, text: str) -> list[str]:
-        if not self.special_tokens:
-            return [text]
         sorted_tokens = sorted(self.special_tokens, key=len, reverse=True)
         pattern = '|'.join(map(re.escape, sorted_tokens))
         chunks = re.split(f'({pattern})', text)
         return chunks
-
-
-    def _pretokenize(self, text: str) -> list[bytes|tuple[bytes, ...]]:
-        """
-        return pre_tokens
-        type(pre_tokens[i]) = tuple[bytes, ...] if it's NOT a special token;
-        type(pre_tokens[i]) = bytes if it's a special token;
-        eg.: 
-            text: 'a <|endoftext|>bb<|endoftext|>'
-            return: [(b'a',), (b' ',), b'<|endoftext|>', (b'b', b'b'), b'<|endoftext|>']
-        """
-        pre_tokens: list[bytes|tuple[bytes, ...]] = []
-
-        chunks = self._split_special_tokens(text)
-        for chunk in chunks:
-            if not chunk:
-                continue
-            elif self.special_tokens and chunk in self.special_tokens:
-                pre_tokens.append(chunk.encode('utf-8'))
-            else:
-                words = re.findall(self.PAT, chunk)
-                
-                for word in words:
-                    word_bytes = tuple([bytes([x]) for x in word.encode('utf-8')])
-                    pre_tokens.append(word_bytes)
-                # pre_tokens += re.findall(self.PAT, chunk)
-        return pre_tokens
     
+    
+
     def _merge_pretoken(self, pretoken) -> tuple[bytes, ...]:
 
         while(True):
 
             # all pairs that can be merged
-            pairs: set[tuple[bytes, bytes]] = set()
+            pairs: list[tuple[bytes, bytes]] = list()
             for i in range(len(pretoken) - 1):
                 pair = (pretoken[i], pretoken[i+1])
                 if pair in self.merges_map:
-                    pairs.add(pair)
+                    pairs.append(pair)
             
             # no pairs to merge
             if not pairs:
@@ -167,25 +149,6 @@ def test_split(tokenizer: BPETokenizer):
     print(tokenizer._split_special_tokens(text1))
     print(tokenizer._split_special_tokens(text2))
 
-def test_pretokenize(tokenizer):
-    text1 = 'a <|endoftext|>bb<|endoftext|>ccc<|endoftext|><|endoftext|><|endoftext|> hello world'
-    text2 = 'a bb ccc ddd'
-    print(tokenizer._pretokenize(text1))
-    print(tokenizer._pretokenize(text2))
-
-def test_merge_pretoken(tokenizer):
-    text = 'a <|endoftext|>bb<|endoftext|>ccc<|endoftext|><|endoftext|><|endoftext|> hello world'
-    pretokens = tokenizer._pretokenize(text)
-    for pretoken in pretokens:
-        print(pretoken, tokenizer._merge_pretoken(pretoken))
-
-def test_pretoken2id(tokenizer):
-    text = 'a <|endoftext|>bb<|endoftext|>ccc<|endoftext|><|endoftext|><|endoftext|> hello world'
-    pretokens = tokenizer._pretokenize(text)
-    for pretoken in pretokens:
-        print(pretoken)
-        pretoken_ids = [tokenizer.token2id[token] for token in pretoken]
-        print(pretoken_ids)
 
 def test_encode(tokenizer):
     text1 = 'a <|endoftext|>bb<|endoftext|>ccc<|endoftext|><|endoftext|><|endoftext|> hello world'
