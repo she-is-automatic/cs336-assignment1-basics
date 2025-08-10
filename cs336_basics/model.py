@@ -108,6 +108,91 @@ class RoPE(nn.Module):
         return result
 
 
+class CausalMHSA(nn.Module):
+    def __init__(self, 
+                 d_model: int, 
+                 num_heads: int, 
+                 position_embedding: RoPE|None=None,
+                 device=None,
+                 dtype=None):
+        super().__init__()
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.d_k = self.d_model // num_heads
+        self.d_v = self.d_k
+
+        self.q_proj = Linear(self.d_model, self.num_heads * self.d_k, device, dtype)
+        self.k_proj = Linear(self.d_model, self.num_heads * self.d_k, device, dtype)
+        self.v_proj = Linear(self.d_model, self.num_heads * self.d_v, device, dtype)
+        self.o_proj = Linear(self.num_heads * self.d_v, self.d_model, device, dtype)
+
+        self.position_embedding = position_embedding
+
+    def forward(
+                    self, 
+                    x: Float[Tensor, " ... sequence_length d_in"],
+                    token_positions: Int[Tensor, " ... seq"] | None = None
+                ) -> Float[Tensor, " ... sequence_length d_out"]:
+        """
+        Given the key, query, and value projection weights of a naive unbatched
+        implementation of multi-head attention, return the output of an optimized batched
+        implementation. This implementation should handle the key, query, and value projections
+        for all heads in a single matrix multiply.
+        This function should not use RoPE.
+        See section 3.2.2 of Vaswani et al., 2017.
+
+        Args:
+            x (Float[Tensor, "... sequence_length d_in"]): input Tensor.
+            token_positions (Int[Tensor, "... sequence_length"]): position indices
+
+
+        Returns:
+            Casual Multi-Head Self-Attention output.
+        """
+        *b, seq_len, d_model = x.shape
+        assert d_model == self.d_model
+
+        Q = self.q_proj(x)
+        K = self.k_proj(x)
+        V = self.v_proj(x)
+
+        # split head
+        Q, K, V = (
+            rearrange(X, '... seq (head d) -> ... head seq d', head=self.num_heads)
+            for X in (Q, K, V)
+        )
+
+        if self.position_embedding is not None:
+            # apply RoPE
+            if token_positions is None:
+                token_positions = cast(Tensor, einx.rearrange('seq -> b... seq', torch.arange(seq_len), b=[1]*len(b)))
+
+            token_positions = rearrange(token_positions, "... seq -> ... 1 seq")
+
+            Q = self.position_embedding(Q, token_positions)
+            K = self.position_embedding(K, token_positions)
+
+        # casual Mask
+        seq = torch.arange(seq_len, device=x.device)
+        qi = cast(Tensor, einx.rearrange('q -> b... 1 q 1', seq, b=[1]*len(b)))
+        kj = cast(Tensor,einx.rearrange('k -> b... 1 1 k', seq, b=[1]*len(b)))
+        causal_mask = qi >= kj
+
+        attn_output = scaled_dot_product_attention(Q, K, V, causal_mask)
+
+        attn_output = rearrange(attn_output, '... h seq d -> ... seq (h d)')
+
+        output = self.o_proj(attn_output)
+
+        return output
+
+
+
+
+
+
+
+
 
 
     
