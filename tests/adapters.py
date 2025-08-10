@@ -11,7 +11,7 @@ from torch import Tensor
 
 from cs336_basics.BPETrainer import BPETrainer
 from cs336_basics.BPETokenizer import BPETokenizer
-from cs336_basics.model import Linear, Embedding, RMSNorm
+from cs336_basics.model import Linear, Embedding, RMSNorm, silu, SwiGLU
 
 def run_linear(
     d_in: int,
@@ -33,7 +33,7 @@ def run_linear(
     """
 
     linear = Linear(d_in, d_out)
-    linear.weight = torch.nn.Parameter(weights)
+    linear.weight.data = weights
     return linear(in_features)
 
 
@@ -57,7 +57,7 @@ def run_embedding(
     """
 
     embedding = Embedding(vocab_size, d_model)
-    embedding.weight = torch.nn.Parameter(weights)
+    embedding.weight.data = weights
     return embedding(token_ids)
 
 
@@ -90,7 +90,11 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+    swiglu = SwiGLU(d_model, d_ff)
+    swiglu.w1.weight.data = w1_weight
+    swiglu.w2.weight.data = w2_weight
+    swiglu.w3.weight.data = w3_weight
+    return swiglu(in_features)
 
 
 def run_scaled_dot_product_attention(
@@ -386,7 +390,7 @@ def run_rmsnorm(
         RMSNorm of the `in_features`.
     """
     rmsnorm = RMSNorm(d_model, eps)
-    rmsnorm.weight = torch.nn.Parameter(weights)
+    rmsnorm.weight.data = weights
     return rmsnorm(in_features)
 
 
@@ -401,7 +405,7 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    raise NotImplementedError
+    return silu(in_features)
 
 
 def run_get_batch(
