@@ -5,6 +5,7 @@ from torch import Tensor
 from jaxtyping import Float, Bool, Int
 import einx
 from typing import cast
+import math
 
 class Linear(nn.Module):
     def __init__(self, d_in: int, d_out: int, device: torch.device|None=None, dtype: torch.dtype|None=None):
@@ -117,3 +118,29 @@ def softmax(x: Tensor, dim: int=-1) -> Tensor:
     safe_x = x - torch.max(x)
     safe_x_exp = torch.exp(safe_x)
     return safe_x_exp / torch.sum(safe_x_exp, dim=dim, keepdim=True)
+
+def scaled_dot_product_attention(
+    Q: Float[Tensor, " ... queries d_k"],
+    K: Float[Tensor, " ... keys d_k"],
+    V: Float[Tensor, " ... values d_v"],
+    mask: Float[Tensor, " ... queries keys"] | None = None,
+) -> Float[Tensor, " ... queries d_v"]:
+    """
+    Given key (K), query (Q), and value (V) tensors, return
+    the output of your scaled dot product attention implementation.
+
+    Args:
+        Q (Float[Tensor, " ... queries d_k"]): Query tensor
+        K (Float[Tensor, " ... keys d_k"]): Key tensor
+        V (Float[Tensor, " ... values d_v"]): Values tensor
+        mask (Float[Tensor, " ... queries keys"] | None): Mask tensor
+    Returns:
+        Float[Tensor, " ... queries d_v"]: Output of SDPA
+    """
+    d_k = K.shape[-1]
+    attn_scores = einsum(Q, K, '... queries d_k, ... keys d_k -> ... queries keys') / math.sqrt(d_k)
+    if mask is not None:
+        attn_scores = torch.where(mask, attn_scores, -torch.inf) 
+
+    probs = softmax(attn_scores, dim=-1)
+    return einsum(probs, V, '... queries keys, ... keys d_v -> ... queries d_v')
