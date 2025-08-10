@@ -21,3 +21,20 @@ class Linear(nn.Module):
     def forward(self, x: Float[Tensor, ' ... d_in']) -> Float[Tensor, ' ... d_out']:
         """Apply the linear transformation to the input."""
         return einsum(x, self.weight, '... d_in, d_out d_in -> ... d_out')
+    
+class Embedding(nn.Module):
+    def __init__(self, vocab_size: int, d_model: int, device=None, dtype=None):
+        """
+        Construct an embedding module.
+        """
+        super().__init__()
+
+        std = 1.0
+
+        self.weight: Float[Tensor, ' vocab_size d_model'] = nn.Parameter(
+            nn.init.trunc_normal_(torch.empty(vocab_size, d_model), mean=0, std=std, a=-3, b=3)
+        )
+
+    def forward(self, token_ids: Int[Tensor, ' ...']):
+        """Lookup the embedding vectors for the given token IDs."""
+        return self.weight[token_ids, :]
