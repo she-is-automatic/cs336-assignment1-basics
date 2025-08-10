@@ -3,6 +3,8 @@ from torch import nn
 from einops import rearrange, einsum
 from torch import Tensor
 from jaxtyping import Float, Bool, Int
+import einx
+from typing import cast
 
 class Linear(nn.Module):
     def __init__(self, d_in: int, d_out: int, device: torch.device|None=None, dtype: torch.dtype|None=None):
@@ -64,15 +66,54 @@ class RMSNorm(nn.Module):
 
 
 class SwiGLU(nn.Module):
-    def __init__(self, d_model: int, d_ff: int):
+    def __init__(self, d_model: int, d_ff: int, device=None, dtype=None):
         super().__init__()
-        self.w1 = Linear(d_model, d_ff)
-        self.w3 = Linear(d_model, d_ff)
-        self.w2 = Linear(d_ff, d_model)
+        self.w1 = Linear(d_model, d_ff, device, dtype)
+        self.w3 = Linear(d_model, d_ff, device, dtype)
+        self.w2 = Linear(d_ff, d_model, device, dtype)
 
     def forward(self, x: Float[Tensor, ' ... d_model']) -> Float[Tensor, ' ... d_model']:
         return self.w2(silu(self.w1(x)) * self.w3(x))
 
+
+class RoPE(nn.Module):
+    def __init__(self, theta: float, d_k: int, max_seq_len: int, device=None) -> None:
+        super().__init__()
+        assert d_k % 2 == 0
+
+        freqs = 1.0 / (theta ** (torch.arange(0, d_k, 2).float() / d_k))
+        positions = torch.arange(max_seq_len)
+        angles = einsum(positions, freqs, 'seq, half_d -> seq half_d')
+
+        self.register_buffer('cos_cache', torch.cos(angles), persistent=False)
+        self.register_buffer('sin_cache', torch.sin(angles), persistent=False)
+
+    def forward(self, x: Float[Tensor, " ... seq d"],
+    token_positions: Int[Tensor, " ... seq"]) -> Float[Tensor, " ... seq d"]:
+        x1, x2 = rearrange(x, '... (half_d half) -> half ... half_d', half=2)
+
+        # just to make pylance happy
+        cos_cache = cast(Tensor, self.cos_cache)
+        sin_cache = cast(Tensor, self.sin_cache)
+
+        cos: Tensor = einx.get_at('[pos] half_d, ... -> ... half_d', cos_cache, token_positions)
+        sin: Tensor = einx.get_at('[pos] half_d, ... -> ... half_d', sin_cache, token_positions)
+
+        x1_rot = cos * x1 - sin * x2
+        x2_rot = sin * x1 + cos * x2
+
+        result: Tensor = cast(Tensor, einx.rearrange('... half_d, ... half_d -> ... (half_d (1+1))', x1_rot, x2_rot))
+
+        return result
+
+
+
+
     
 def silu(x):
     return x * torch.sigmoid(x)
+
+def softmax(x: Tensor, dim: int=-1) -> Tensor:
+    safe_x = x - torch.max(x)
+    safe_x_exp = torch.exp(safe_x)
+    return safe_x_exp / torch.sum(safe_x_exp, dim=dim, keepdim=True)
