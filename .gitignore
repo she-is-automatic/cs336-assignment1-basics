@@ -170,3 +170,5 @@ test.ipynb
 
 # bpe training results
 results/
+
+.vscode

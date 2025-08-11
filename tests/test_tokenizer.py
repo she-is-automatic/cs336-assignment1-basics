@@ -9,6 +9,9 @@ import psutil
 import pytest
 import tiktoken
 
+tiktoken_cache_dir = "tests/.tiktoken"
+os.environ["TIKTOKEN_CACHE_DIR"] = tiktoken_cache_dir
+
 from .adapters import get_tokenizer
 from .common import FIXTURES_PATH, gpt2_bytes_to_unicode
 
