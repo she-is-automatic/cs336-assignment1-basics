@@ -124,7 +124,7 @@ class CausalMHSA(nn.Module):
         self.q_proj = Linear(self.d_model, self.num_heads * self.d_k, device, dtype)
         self.k_proj = Linear(self.d_model, self.num_heads * self.d_k, device, dtype)
         self.v_proj = Linear(self.d_model, self.num_heads * self.d_v, device, dtype)
-        self.o_proj = Linear(self.num_heads * self.d_v, self.d_model, device, dtype)
+        self.output_proj = Linear(self.num_heads * self.d_v, self.d_model, device, dtype)
 
         self.position_embedding = position_embedding
 
@@ -182,9 +182,37 @@ class CausalMHSA(nn.Module):
 
         attn_output = rearrange(attn_output, '... h seq d -> ... seq (h d)')
 
-        output = self.o_proj(attn_output)
+        output = self.output_proj(attn_output)
 
         return output
+
+
+class TransformerBlock(nn.Module):
+    def __init__(self, 
+                 d_model: int, 
+                 num_heads: int, 
+                 d_ff: int, 
+                 position_embedding: RoPE|None=None,
+                 device=None,
+                 dtype=None):
+        super().__init__()
+        self.attn = CausalMHSA(
+            d_model=d_model,
+            num_heads=num_heads,
+            position_embedding=position_embedding,
+            device=device,
+            dtype=dtype
+            )
+        self.ffn = SwiGLU(d_model=d_model, d_ff=d_ff, device=device, dtype=dtype)
+        self.ln1 = RMSNorm(d_model, device=device, dtype=dtype)
+        self.ln2 = RMSNorm(d_model, device=device, dtype=dtype)
+
+    def forward(self, x: Float[Tensor, " batch sequence_length d_model"]) -> Float[Tensor, " batch sequence_length d_model"]:
+        x_attn = self.attn(self.ln1(x))
+        attn_output = x + x_attn
+        x_ff = self.ffn(self.ln2(attn_output))
+        ff_output = x_ff + attn_output
+        return ff_output
 
 
 
