@@ -11,7 +11,7 @@ from torch import Tensor
 
 from cs336_basics.BPETrainer import BPETrainer
 from cs336_basics.BPETokenizer import BPETokenizer
-from cs336_basics.model import Linear, Embedding, RMSNorm, silu, SwiGLU, RoPE, softmax, scaled_dot_product_attention, CausalMHSA, TransformerBlock
+from cs336_basics.model import Linear, Embedding, RMSNorm, silu, SwiGLU, RoPE, softmax, scaled_dot_product_attention, CausalMHSA, TransformerBlock, TransformerLM
 
 def run_linear(
     d_in: int,
@@ -381,7 +381,9 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    model = TransformerLM(vocab_size, context_length, d_model, num_layers, num_heads, d_ff, rope_theta)
+    model.load_state_dict(weights)
+    return model(in_indices)
 
 
 def run_rmsnorm(

@@ -215,6 +215,62 @@ class TransformerBlock(nn.Module):
         return ff_output
 
 
+class TransformerLM(nn.Module):
+    def __init__(
+            self,
+            vocab_size: int,
+            context_length: int,
+            d_model: int,
+            num_layers: int,
+            num_heads: int,
+            d_ff: int,
+            rope_theta: float,
+            device=None,
+            dtype=None):
+        super().__init__()
+
+        # save config for further save and re-create the model
+        # such as: model = TransformerLM(**loaded_config)
+        self.config = {
+            k: v for k, v in locals().items() 
+            if k != "self" and not (k.startswith("__") and k.endswith("__"))
+        }
+
+        # input embedding
+        self.vocab_size = vocab_size
+        self.context_length = context_length
+        self.d_model = d_model
+        self.token_embeddings = Embedding(vocab_size, d_model, device, dtype)
+
+        # position embedding
+        d_head = d_model // num_heads
+        self.position_embedding = RoPE(rope_theta, d_head, context_length, device)
+        
+        # transformer blocks
+        self.layers = nn.ModuleList(
+            [
+                TransformerBlock(
+                    d_model=d_model,
+                    num_heads=num_heads,
+                    d_ff=d_ff,
+                    position_embedding=self.position_embedding,
+                    device=device,
+                    dtype=dtype
+                )
+                for i in range(num_layers)
+            ]
+        )
+
+        self.ln_final = RMSNorm(d_model=d_model, device=device, dtype=dtype)
+        self.lm_head = Linear(d_in=d_model, d_out=vocab_size, device=device, dtype=dtype)
+
+    def forward(self, x: Int[Tensor, " batch_size sequence_length"],
+) -> Float[Tensor, " batch_size sequence_length vocab_size"]:
+        x = self.token_embeddings(x)
+        for layer in self.layers:
+            x = layer(x)
+        x = self.ln_final(x)
+        return self.lm_head(x)
 
 
 
