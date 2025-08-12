@@ -6,6 +6,7 @@ from jaxtyping import Float, Bool, Int
 import einx
 from typing import cast
 import math
+from .nn_utils import softmax
 
 class Linear(nn.Module):
     def __init__(self, d_in: int, d_out: int, device: torch.device|None=None, dtype: torch.dtype|None=None):
@@ -283,10 +284,7 @@ class TransformerLM(nn.Module):
 def silu(x):
     return x * torch.sigmoid(x)
 
-def softmax(x: Tensor, dim: int=-1) -> Tensor:
-    safe_x = x - torch.max(x)
-    safe_x_exp = torch.exp(safe_x)
-    return safe_x_exp / torch.sum(safe_x_exp, dim=dim, keepdim=True)
+
 
 def scaled_dot_product_attention(
     Q: Float[Tensor, " ... queries d_k"],
