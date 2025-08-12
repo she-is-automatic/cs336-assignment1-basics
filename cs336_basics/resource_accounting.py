@@ -134,10 +134,18 @@ def main():
         mem_results = transformer_memory_accounting(**config)
         total_params = mem_results["total_params"]
         params_mem_gb = mem_results["memory_breakdown_bytes"]["parameters_bytes"] / 1e9
+        grads_mem_gb = mem_results["memory_breakdown_bytes"]["gradients_bytes"] / 1e9
+        opt_states_mem_gb = mem_results["memory_breakdown_bytes"]["optimizer_state_bytes"] / 1e9
+        activs_mem_gb = mem_results["memory_breakdown_bytes"]["activations_bytes"] / 1e9
+        total_peak_mem_gb = mem_results["memory_breakdown_bytes"]["total_peak_bytes"] / 1e9
         
         print(f"\n[Memory & Parameters]")
         print(f"Total Trainable Parameters: {total_params / 1e6:.2f} Million ({total_params / 1e9:.3f} Billion)")
         print(f"Memory for Parameters (float32): {params_mem_gb:.3f} GB")
+        print(f"Memory for Gradients (float32): {grads_mem_gb:.3f} GB")
+        print(f"Memory for Optimizer States (float32): {opt_states_mem_gb:.3f} GB")
+        print(f"Memory for Activations (float32): {activs_mem_gb:.3f} GB")
+        print(f"Total Peak Memory (float32): {total_peak_mem_gb:.3f} GB")
 
         # --- FLOPs Calculation ---
         flops_results = transformer_flops_accounting(**config)
